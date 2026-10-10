@@ -1,0 +1,21 @@
+# environments and tool caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+dist/
+build/
+*.egg-info/
+.env
+
+# QuALITY, the ONNX models and built trees are fetched or built into $RAPTREE_DATA_DIR
+# and the Hugging Face cache; none of them belongs in the repository.
+data/
+models/
+trees/
+*.onnx
+*.npz
+*.part
+QuALITY.*
