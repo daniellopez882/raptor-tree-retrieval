@@ -1,0 +1,26 @@
+ ⭘                                 raptree — The Ferry · raptor-collapsed
+╭────────────────────────────────────────────────────────────────╮╭──────────────────────────────────────────╮
+│▼ The Ferry · nodes per layer 1/2/4                             ││ The Ferry                                │
+│└── ▶     L2 #6     17 tok  2 ch  The ferry left the north pier ││ 8 sentences, 7 nodes, 3 layers           │
+│                                                                ││ built with hashing-384, none,            │
+│                                                                ││ hand-written                             │
+│                                                                ││                                          │
+│                                                                ││ e expands a level, m changes the         │
+│                                                                ││ retrieval method,                        │
+│                                                                ││ Enter on a question highlights what that │
+│                                                                ││ method retrieves.                        │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                │╰──────────────────────────────────────────╯
+│                                                                │╭──────────────────────────────────────────╮
+│                                                                ││ Q1 Who captained the ferry?              │
+│                                                                ││ Q2 (hard) Why did the ferry turn back?   │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                ││                                          │
+╰────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────╯
+ m Method  e Expand a level  c Collapse  q Quit

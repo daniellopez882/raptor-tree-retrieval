@@ -1,0 +1,26 @@
+ ⭘                                 raptree — The Ferry · raptor-collapsed
+╭────────────────────────────────────────────────────────────────╮╭──────────────────────────────────────────╮
+│▼ The Ferry · nodes per layer 1/2/4                             ││ The Ferry                                │
+│└── ▼     L2 #6     17 tok  2 ch  The ferry left the north pier ││ 8 sentences, 7 nodes, 3 layers           │
+│    ├── ▼     L1 #4     16 tok  2 ch  The ferry left the north p││ built with hashing-384, none,            │
+│    │   ├──     L0 #0     16 tok  leaf  The ferry left the north││ hand-written                             │
+│    │   └──     L0 #1     15 tok  leaf  A storm rose over the st││                                          │
+│    └── ▼     L1 #5     18 tok  2 ch  In the town the bakery ope││ e expands a level, m changes the         │
+│        ├──     L0 #2     19 tok  leaf  In the town the bakery o││ retrieval method,                        │
+│        └──     L0 #3     16 tok  leaf  By evening the sea was c││ Enter on a question highlights what that │
+│                                                                ││ method retrieves.                        │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                │╰──────────────────────────────────────────╯
+│                                                                │╭──────────────────────────────────────────╮
+│                                                                ││ Q1 Who captained the ferry?              │
+│                                                                ││ Q2 (hard) Why did the ferry turn back?   │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                ││                                          │
+│                                                                ││                                          │
+╰────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────╯
+ m Method  e Expand a level  c Collapse  q Quit
