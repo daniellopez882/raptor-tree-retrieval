@@ -165,8 +165,7 @@ def fit_mixture(
     history: list[float] = []
     previous = -math.inf
     converged = False
-    n_iter = 0
-    for n_iter in range(1, max_iter + 1):  # noqa: B007 - n_iter is reported after the loop
+    for _ in range(max_iter):
         mean_ll, log_resp = e_step(X, params)
         history.append(mean_ll)
         params = m_step(X, np.exp(log_resp), covariance_type, reg_covar)
@@ -174,6 +173,7 @@ def fit_mixture(
             converged = True
             break
         previous = mean_ll
+    n_iter = len(history)
     history.append(e_step(X, params)[0])
     return MixtureFit(params, history, n_iter, converged)
 
