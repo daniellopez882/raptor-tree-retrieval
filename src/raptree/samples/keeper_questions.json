@@ -1,0 +1,41 @@
+[
+  {
+    "question": "Why did the Harbour Board vote to keep a keeper on Gull Rock?",
+    "options": [
+      "The electric lamp was more expensive than a keeper's wages",
+      "A machine could not detect an unlit boat in fog or ring a bell for it",
+      "Silas Herne changed his mind after reading Crane's logbooks",
+      "The company withdrew its offer after the Merrow was found"
+    ],
+    "gold": 1,
+    "hard": true
+  },
+  {
+    "question": "What was the grey schooner that Crane reported?",
+    "options": [
+      "A ghost ship that only Crane could see",
+      "The supply boat run by Owen Pascoe",
+      "Most likely smugglers running north without lights in fog",
+      "A coastguard vessel searching for the Merrow"
+    ],
+    "gold": 2,
+    "hard": true
+  },
+  {
+    "question": "How many steps did Marta climb to reach the lamp?",
+    "options": ["Eleven", "Forty", "Ninety-seven", "A hundred"],
+    "gold": 2,
+    "hard": false
+  },
+  {
+    "question": "What did Marta's brother Daniel find in the insurer's records?",
+    "options": [
+      "A schooner called the Merrow that went missing near Gull Rock",
+      "A claim filed by Tobias Crane for a damaged lens",
+      "The Harbour Board's plans for an electric lamp",
+      "A list of smugglers stopped at Pendower"
+    ],
+    "gold": 0,
+    "hard": false
+  }
+]

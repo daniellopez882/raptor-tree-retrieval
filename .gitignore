@@ -18,4 +18,4 @@ trees/
 *.onnx
 *.npz
 *.part
-QuALITY.*
+QuALITY.v1.0.1.*
