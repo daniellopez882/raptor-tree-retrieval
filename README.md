@@ -13,7 +13,9 @@ in the tests, as a reference. A terminal UI shows any tree layer by layer and ma
 each method retrieved for a question.
 
 The walkthrough below follows one story through the whole pipeline. The benchmark tables come at
-the end. They are **pending benchmark**: the full run has not happened yet.
+the end. The short answer from the full run over all 2,086 dev questions: with the LLM-free
+readers measured here, the collapsed tree ties BM25 and dense retrieval over flat chunks, and
+beam traversal never does better than the collapsed tree.
 
 ## Try it without downloading anything
 
@@ -36,7 +38,7 @@ The story is article 62139 of QuALITY dev, *Captain Chaos* by Nelson S. Bond (Pl
 Every screen below is the verbatim output of `uv run raptree-bench walkthrough`, stored in
 [`bench/results/walkthrough-62139.json`](bench/results/walkthrough-62139.json) together with the
 machine, date, git commit and command. Captured on an Intel i5-8500 (6 cores, 12 GB RAM),
-Windows 10, CPU only, on 2026-10-12 (git 498bbb0).
+Windows 10, CPU only, on 2026-10-13 (git ab13338).
 
 ### Step 1. Fetch QuALITY and the three ONNX models
 
@@ -321,7 +323,8 @@ can open any of them. It retrieves with all five methods for all 2,086 questions
 three readers and writes `bench/results/quality-dev-2k.json`. The per-question predictions go
 next to it in a `.predictions.jsonl` file. `report` prints the Markdown tables that are copied
 into the next section. Runs limited with `--limit-articles` or `--limit-questions` must write to
-a `smoke-*.json` file, so a partial run cannot replace the headline results.
+a `smoke-*.json` file, so a partial run cannot replace the headline results. On the machine named
+below, the full run took 3,932 seconds, 317 of them for building the 115 trees.
 
 ## How the pieces connect
 
@@ -365,81 +368,154 @@ flowchart TD
 
 ## Results on QuALITY dev
 
-> **Pending benchmark.** Every cell below is filled from `bench/results/quality-dev-2k.json`
-> by `raptree-bench report` once the full run has finished on the machine named here.
+Every cell below is copied from the output of `raptree-bench report` for
+[`bench/results/quality-dev-2k.json`](bench/results/quality-dev-2k.json). The per-question
+predictions behind the paired tests are in
+[`bench/results/quality-dev-2k.predictions.jsonl`](bench/results/quality-dev-2k.predictions.jsonl).
 
-Measured on: Intel i5-8500 (6 cores, 12 GB RAM), Windows 10, CPU only. Date: pending benchmark.
-Command: `uv run raptree-bench run`.
+Measured on: Intel i5-8500 (6 cores, 12 GB RAM), Windows 10, CPU only, Python 3.12. Date:
+2026-10-12 (git 1c7756d). The run covered all 115 dev articles and all 2,086 questions, with no
+subsetting, and took 3,932 seconds of wall time.
+
+To reproduce it:
+
+```bash
+uv run raptree fetch
+uv run raptree-bench run
+uv run raptree-bench report bench/results/quality-dev-2k.json
+```
+
+With its defaults, `run` is exactly the command stored in the results file:
+`uv run raptree-bench run --out bench/results/quality-dev-2k.json --budget 2000 --beam 3 --evidence-tokens 192 --readers nli,cross-encoder,overlap --profile onnx --summarizer extractive --llm openai --save-trees`.
+The `--llm openai` part only names the adapter that LLM steps would use. With the extractive
+summariser and these three readers, no LLM is called.
 
 The setup: 2,000 WordPiece tokens of context per question for every method, trees as built
 above, and chance at 25%. *Hard* is QuALITY's own difficulty flag. Intervals are 95% bootstrap
 intervals that resample whole articles
 ([ADR 5](docs/adr/0005-article-clustered-intervals-and-exact-paired-tests.md)).
 
+### What the run shows
+
+- **With the NLI reader, the five contexts are indistinguishable.** They score between 33.5% and
+  34.9%, and no pair of them differs after the Holm adjustment. Every context beats the
+  no-context control (29.4%); for the collapsed tree the gap is 5.0 points (Holm p = 0.003).
+- **With the cross-encoder reader, BM25 and the collapsed tree beat the first 2,000 tokens.**
+  BM25 (27.1%) and the collapsed tree (27.0%) both beat truncation (23.3%), with Holm p = 0.004
+  and 0.006. Dense retrieval (25.8%) and traversal (25.6%) fall in between, and no test separates
+  them from any other context. The collapsed tree and BM25 are tied: 174 questions only the tree
+  gets right, 175 only BM25.
+- **The lexical-overlap reader stays at chance** for every context (23.5% to 25.7%), and no
+  difference survives the adjustment.
+- **Traversal never beats the collapsed tree.** It is 0.9, 1.4 and 1.0 points lower with the
+  three readers, none of it significant. The RAPTOR paper reports the same ordering.
+- **The hard subset does not change the picture.** That is where RAPTOR's synthesis claim should
+  show. With the NLI reader BM25 scores 32.4% on hard questions and the collapsed tree 31.7%;
+  with the cross-encoder they score 23.8% and 23.6%.
+
+So under a fixed 2,000-token budget, with extractive summaries and these LLM-free readers, the
+tree's clustered selection does no better than BM25 or dense retrieval over flat chunks.
+
 ### Accuracy with the NLI reader
 
 | Context | All | 95% CI | Hard | 95% CI | Easy | 95% CI |
 |---|---:|---|---:|---|---:|---|
-| First 2K tokens | pending benchmark | | | | | |
-| BM25 top-k | pending benchmark | | | | | |
-| Dense top-k | pending benchmark | | | | | |
-| RAPTOR collapsed | pending benchmark | | | | | |
-| RAPTOR traversal | pending benchmark | | | | | |
-| No context (options only) | pending benchmark | | | | | |
+| First 2K tokens | 34.2 | [31.9, 36.4] | 30.3 | [27.5, 33.2] | 38.2 | [34.7, 41.5] |
+| BM25 top-k | 34.4 | [32.5, 36.3] | 32.4 | [29.9, 35.1] | 36.4 | [33.4, 39.4] |
+| Dense top-k | 34.9 | [32.7, 36.9] | 31.0 | [28.5, 33.6] | 38.9 | [35.2, 42.2] |
+| RAPTOR collapsed | 34.4 | [32.3, 36.4] | 31.7 | [29.2, 34.1] | 37.2 | [33.8, 40.6] |
+| RAPTOR traversal | 33.5 | [31.3, 35.7] | 30.3 | [27.3, 33.2] | 36.8 | [33.6, 39.9] |
+| No context (options only) | 29.4 | [27.3, 31.4] | 27.4 | [24.5, 30.5] | 31.4 | [28.9, 34.1] |
+
+Accuracy in %. All: n = 2,086; hard: n = 1,065; easy: n = 1,021. The same counts hold for the
+two tables below.
 
 ### Accuracy with the cross-encoder reader
 
 | Context | All | 95% CI | Hard | 95% CI | Easy | 95% CI |
 |---|---:|---|---:|---|---:|---|
-| First 2K tokens | pending benchmark | | | | | |
-| BM25 top-k | pending benchmark | | | | | |
-| Dense top-k | pending benchmark | | | | | |
-| RAPTOR collapsed | pending benchmark | | | | | |
-| RAPTOR traversal | pending benchmark | | | | | |
-| No context (options only) | pending benchmark | | | | | |
+| First 2K tokens | 23.3 | [21.2, 25.2] | 19.2 | [17.0, 21.7] | 27.4 | [24.7, 30.1] |
+| BM25 top-k | 27.1 | [25.1, 29.0] | 23.8 | [21.2, 26.3] | 30.6 | [27.6, 33.5] |
+| Dense top-k | 25.8 | [23.9, 27.8] | 22.5 | [19.9, 24.9] | 29.3 | [26.5, 32.2] |
+| RAPTOR collapsed | 27.0 | [25.2, 28.9] | 23.6 | [20.9, 26.1] | 30.7 | [27.7, 33.6] |
+| RAPTOR traversal | 25.6 | [23.7, 27.5] | 20.8 | [18.5, 23.2] | 30.6 | [27.6, 33.5] |
+| No context (options only) | 22.6 | [20.5, 24.8] | 21.2 | [18.4, 24.3] | 24.1 | [21.5, 26.8] |
 
 ### Accuracy with the lexical-overlap reader
 
 | Context | All | 95% CI | Hard | 95% CI | Easy | 95% CI |
 |---|---:|---|---:|---|---:|---|
-| First 2K tokens | pending benchmark | | | | | |
-| BM25 top-k | pending benchmark | | | | | |
-| Dense top-k | pending benchmark | | | | | |
-| RAPTOR collapsed | pending benchmark | | | | | |
-| RAPTOR traversal | pending benchmark | | | | | |
-| No context (options only) | pending benchmark | | | | | |
+| First 2K tokens | 23.7 | [22.0, 25.3] | 23.4 | [20.9, 25.9] | 24.1 | [21.8, 26.5] |
+| BM25 top-k | 24.5 | [22.7, 26.5] | 22.6 | [20.1, 25.2] | 26.5 | [24.1, 29.1] |
+| Dense top-k | 24.7 | [22.7, 26.6] | 23.5 | [20.9, 26.1] | 26.0 | [23.2, 28.7] |
+| RAPTOR collapsed | 25.7 | [23.6, 27.8] | 23.9 | [21.2, 26.7] | 27.6 | [25.1, 30.1] |
+| RAPTOR traversal | 24.7 | [22.6, 26.9] | 22.2 | [19.3, 25.0] | 27.4 | [24.7, 30.1] |
+| No context (options only) | 23.5 | [21.8, 25.2] | 23.7 | [21.5, 25.9] | 23.4 | [20.8, 26.0] |
 
 ### Is the collapsed tree better than each alternative?
 
-Exact paired sign-flip tests on per-question correctness, Holm-adjusted over the 15 pairs per
-reader.
+Exact paired sign-flip tests on per-question correctness over all 2,086 questions, Holm-adjusted
+over the 15 pairs per reader. A - B is in percentage points. The other ten pairs per reader are
+in the results file.
 
-| Reader | A | B | A - B (points) | only A right | only B right | p | p (Holm) |
+| Reader | A | B | A - B | only A right | only B right | p | p (Holm) |
 |---|---|---|---:|---:|---:|---:|---:|
-| NLI | RAPTOR collapsed | each other context | pending benchmark | | | | |
-| cross-encoder | RAPTOR collapsed | each other context | pending benchmark | | | | |
-| lexical overlap | RAPTOR collapsed | each other context | pending benchmark | | | | |
+| NLI | First 2K tokens | RAPTOR collapsed | -0.2 | 260 | 265 | 0.861 | 1.000 |
+| NLI | BM25 top-k | RAPTOR collapsed | -0.0 | 201 | 202 | 1.000 | 1.000 |
+| NLI | Dense top-k | RAPTOR collapsed | +0.4 | 142 | 133 | 0.630 | 1.000 |
+| NLI | RAPTOR collapsed | RAPTOR traversal | +0.9 | 201 | 182 | 0.358 | 1.000 |
+| NLI | RAPTOR collapsed | No context (options only) | +5.0 | 447 | 342 | <0.001 | 0.003 |
+| cross-encoder | First 2K tokens | RAPTOR collapsed | -3.8 | 205 | 284 | <0.001 | 0.006 |
+| cross-encoder | BM25 top-k | RAPTOR collapsed | +0.0 | 175 | 174 | 1.000 | 1.000 |
+| cross-encoder | Dense top-k | RAPTOR collapsed | -1.2 | 81 | 106 | 0.079 | 0.553 |
+| cross-encoder | RAPTOR collapsed | RAPTOR traversal | +1.4 | 189 | 159 | 0.120 | 0.720 |
+| cross-encoder | RAPTOR collapsed | No context (options only) | +4.4 | 407 | 315 | <0.001 | 0.008 |
+| lexical overlap | First 2K tokens | RAPTOR collapsed | -2.0 | 201 | 243 | 0.052 | 0.773 |
+| lexical overlap | BM25 top-k | RAPTOR collapsed | -1.2 | 137 | 162 | 0.165 | 1.000 |
+| lexical overlap | Dense top-k | RAPTOR collapsed | -1.1 | 65 | 87 | 0.088 | 1.000 |
+| lexical overlap | RAPTOR collapsed | RAPTOR traversal | +1.0 | 154 | 133 | 0.238 | 1.000 |
+| lexical overlap | RAPTOR collapsed | No context (options only) | +2.2 | 368 | 322 | 0.087 | 1.000 |
 
 ### What each method put into the context
 
 | Context | Mean tokens | Distinct-sentence tokens | Nodes | From summaries | Latency p50 (ms) | p90 (ms) |
 |---|---:|---:|---:|---:|---:|---:|
-| First 2K tokens | pending benchmark | | | | | |
-| BM25 top-k | pending benchmark | | | | | |
-| Dense top-k | pending benchmark | | | | | |
-| RAPTOR collapsed | pending benchmark | | | | | |
-| RAPTOR traversal | pending benchmark | | | | | |
+| First 2K tokens | 1957 | 1957 | 22.7 | 0.0% | 0.01 | 0.01 |
+| BM25 top-k | 1982 | 1982 | 22.9 | 0.0% | 0.27 | 0.56 |
+| Dense top-k | 1982 | 1982 | 22.9 | 0.0% | 0.04 | 0.05 |
+| RAPTOR collapsed | 1983 | 1665 | 21.0 | 26.8% | 0.04 | 0.05 |
+| RAPTOR traversal | 1900 | 1522 | 20.0 | 28.1% | 0.05 | 0.06 |
+
+Extractive summaries repeat sentences that are also in the leaves. When a summary and one of its
+leaves are both retrieved, the same sentence takes up budget twice. So the collapsed tree's 1,983
+tokens hold 1,665 tokens of distinct sentences, and traversal's 1,900 hold 1,522. Traversal's
+mean also stays further below the budget: its candidates are only the beam path and the leaves
+under the final beam, and they can run out before 2,000 tokens. The latencies cover ranking and
+packing only. Embedding the query takes another 34.8 ms per question.
 
 ### Building the trees
 
 | Per article | Mean | Median | p90 | Max |
 |---|---:|---:|---:|---:|
-| Build seconds | pending benchmark | | | |
-| Nodes per tree | pending benchmark | | | |
-| Leaves per tree | pending benchmark | | | |
-| Article tokens | pending benchmark | | | |
+| Build seconds | 2.8 | 2.9 | 3.9 | 5.1 |
+| Nodes per tree | 76.6 | 84.0 | 104.6 | 112.0 |
+| Leaves per tree | 64.3 | 72.0 | 85.0 | 93.0 |
+| Article tokens | 5609.3 | 6387.0 | 7412.2 | 8239.0 |
 
-Tree depth histogram, stage totals and reader throughput: pending benchmark.
+62 trees have two layers (leaves and one summary layer) and 53 have three. Building all 115
+trees took 317 seconds: 261 for embedding, 51 for UMAP and EM clustering, and 1.5 for the
+extractive summaries.
+
+### Reading cost
+
+| Reader | Pairs scored | Distinct pairs | Seconds | Pairs per second |
+|---|---:|---:|---:|---:|
+| xtremedistil-l6-h256-zeroshot (NLI) | 50,064 | 48,938 | 1314 | 37.2 |
+| ms-marco-MiniLM-L6-v2 (cross-encoder) | 50,064 | 48,938 | 2186 | 22.4 |
+| lexical overlap | 50,064 | 48,938 | 3 | 18941.5 |
+
+Each question gives one pair per option for each of the six contexts, and identical pairs are
+scored once. The two model readers take up most of the run's wall time.
 
 ### Not run
 
@@ -454,13 +530,15 @@ Both are implemented and wired to the command line (see
 ## What these results can and cannot say
 
 - **Extractive summaries test selection, not synthesis.** A summary node here can only bring
-  existing sentences together. If the collapsed tree beats dense retrieval, clustered selection
-  helped. If it does not, the result says nothing about RAPTOR's abstractive summaries, which
-  were not run.
-- **The readers are weak.** Small NLI and cross-encoder models with 192 tokens of evidence per
-  option will score close to chance on QuALITY, especially on the hard subset. The comparison
-  that matters is between contexts for the same reader, not the absolute level. These numbers
-  cannot be set beside the paper's GPT-4 accuracies.
+  existing sentences together. The collapsed tree did not beat dense retrieval, so clustered
+  selection of verbatim sentences did not help. That says nothing about RAPTOR's abstractive
+  summaries, which were not run.
+- **The readers are weak.** The best cell is 34.9% (NLI reader, dense context) against 25%
+  chance. The cross-encoder tops out at 27.1%, and the lexical-overlap reader stays at chance.
+  With no context at all the cross-encoder scores 22.6%, below chance, so it prefers some options
+  for reasons that have nothing to do with the story. The comparison that matters is between
+  contexts for the same reader, not the absolute level. These numbers cannot be set beside the
+  paper's GPT-4 accuracies.
 - **The evidence step narrows the differences.** All methods pass through the same per-option
   selection of 192 tokens, so a context that holds more relevant sentences only helps when those
   sentences survive that cut.
@@ -469,8 +547,10 @@ Both are implemented and wired to the command line (see
   whole articles.
 - **Tokens are WordPiece tokens.** The 2,000-token budget is counted with the MiniLM tokenizer.
   An LLM's tokenizer would count the same context differently.
-- **The trees are shallow.** With roughly 30 to 80 leaves per article and RAPTOR's stopping rule,
-  articles get two or three layers. The depth histogram in the results shows the split.
+- **The trees are shallow.** With 28 to 93 leaves per article (median 72) and RAPTOR's stopping
+  rule, 62 trees have two layers and 53 have three. QuALITY articles are short enough that a
+  2,000-token context already holds about a third of a median article, so the hierarchy has
+  little room to help.
 - **One machine, CPU only.** Timings come from one Windows 10 desktop, and latencies cover
   retrieval only (query embedding is reported separately).
 
