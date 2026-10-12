@@ -82,7 +82,7 @@ def test_cli_writes_results_with_provenance(data_dir: Path, tmp_path: Path) -> N
     )
     assert result.exit_code == 0, result.output
     doc = json.loads(out.read_text(encoding="utf-8"))
-    for key in ("date", "git_sha", "command", "machine", "config", "accuracy", "trees"):
+    for key in ("date", "git_sha", "command", "machine", "config", "accuracy", "wall_seconds"):
         assert key in doc
     assert doc["machine"]["cpu"]
     assert doc["machine"]["packages"]["numpy"]

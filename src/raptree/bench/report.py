@@ -116,6 +116,8 @@ def render(results: dict[str, Any]) -> str:
         f"Measured on {m['cpu']}, {m['physical_cores']} cores, {m['ram_gb']} GB RAM, {m['os']}, "
         f"Python {m['python']}, CPU only; {results['date']}; git {str(results['git_sha'])[:7]}.",
         f"Command: `{results['command']}`",
+        f"Wall time {results['wall_seconds'] / 60:.1f} min, of which tree building "
+        f"{results['trees']['total_build_seconds'] / 60:.1f} min.",
     ]
     for reader in results["accuracy"]:
         parts += [f"### Accuracy, reader = {reader}", accuracy_table(results, reader)]

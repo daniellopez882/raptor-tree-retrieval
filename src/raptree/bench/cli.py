@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shlex
+import time
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -92,9 +93,11 @@ def run(
         )
     dataset = _dataset_or_exit()
     trees_dir = data_dir() / "trees" / profile if save_trees else None
+    started = time.perf_counter()
     results, predictions = run_benchmark(
         config, dataset, trees_dir=trees_dir, log=lambda m: typer.echo(m, err=True)
     )
+    wall_seconds = time.perf_counter() - started
     document = {
         "benchmark": "QuALITY v1.0.1 dev, multiple choice under a fixed context budget",
         "date": local_date(),
@@ -103,6 +106,7 @@ def run(
         "command": _command_line("run", ctx.params),
         "machine": machine_info(),
         "dataset_file": {"url": QUALITY_DEV.url, "sha256": QUALITY_DEV.sha256},
+        "wall_seconds": wall_seconds,
         **results,
     }
     out.parent.mkdir(parents=True, exist_ok=True)
