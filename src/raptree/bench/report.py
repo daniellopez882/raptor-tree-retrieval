@@ -35,7 +35,7 @@ def accuracy_table(results: dict[str, Any], reader: str) -> str:
                 cells += ["", ""]
                 continue
             lo, hi = entry["ci95"]
-            cells += [_pct(entry["accuracy"]), f"{_pct(lo)}–{_pct(hi)}"]
+            cells += [_pct(entry["accuracy"]), f"[{_pct(lo)}, {_pct(hi)}]"]
         lines.append("| " + " | ".join(cells) + " |")
     n = acc[METHODS[0]]
     counts = ", ".join(f"{s}: n={n[s]['n']}" for s in SUBSETS if s in n)
@@ -46,7 +46,7 @@ def accuracy_table(results: dict[str, Any], reader: str) -> str:
 
 def paired_table(results: dict[str, Any], reader: str, against: str = "raptor-collapsed") -> str:
     lines = [
-        "| A | B | A − B (pts) | only A right | only B right | p | p (Holm) |",
+        "| A | B | A - B (points) | only A right | only B right | p | p (Holm) |",
         "|---|---|---:|---:|---:|---:|---:|",
     ]
     for t in results["paired_tests"][reader]:

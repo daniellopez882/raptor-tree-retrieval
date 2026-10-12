@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -194,7 +195,9 @@ def capture(
 
     text = asyncio.run(script())
     if out is None:
-        typer.echo(text, nl=False)
+        # The screen is full of box-drawing characters; bypass the console code page.
+        sys.stdout.buffer.write(text.encode("utf-8"))
+        sys.stdout.flush()
     else:
         out.write_text(text, encoding="utf-8")
 
