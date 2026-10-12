@@ -1,4 +1,4 @@
-"""``raptree-bench``: run the QuALITY benchmark and print its tables."""
+"""``raptree-bench``: run the QuALITY benchmark, print its tables, capture the walkthrough."""
 
 from __future__ import annotations
 
@@ -12,18 +12,21 @@ import typer
 from raptree.bench.machine import git_state, local_date, local_timestamp, machine_info
 from raptree.bench.report import render
 from raptree.bench.runner import ALL_READERS, READERS, BenchConfig, run_benchmark
+from raptree.cli import describe, embedder_for
 from raptree.llm import LLM_PROVIDERS
-from raptree.profiles import PROFILES, SUMMARIZERS
+from raptree.profiles import PROFILES, SUMMARIZERS, make_builder
+from raptree.quality import load_quality
 from raptree.sources import QUALITY_DEV, data_dir, quality_path
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help=__doc__)
 
 HEADLINE = Path("bench/results/quality-dev-2k.json")
+WALKTHROUGH = Path("bench/results/walkthrough-62139.json")
 
 
-def _command_line(params: dict[str, Any]) -> str:
+def _command_line(subcommand: str, params: dict[str, Any]) -> str:
     """The effective command with every option spelled out, so a rerun needs no defaults."""
-    parts = ["uv", "run", "raptree-bench", "run"]
+    parts = ["uv", "run", "raptree-bench", subcommand]
     for name, value in params.items():
         flag = "--" + name.replace("_", "-")
         if value is None:
@@ -87,10 +90,7 @@ def run(
         raise typer.BadParameter(
             f"{HEADLINE} holds the onnx-profile results; pass another --out", param_hint="--out"
         )
-    dataset = quality_path()
-    if not dataset.exists():
-        typer.echo("QuALITY is missing; run `raptree fetch` first.", err=True)
-        raise typer.Exit(2)
+    dataset = _dataset_or_exit()
     trees_dir = data_dir() / "trees" / profile if save_trees else None
     results, predictions = run_benchmark(
         config, dataset, trees_dir=trees_dir, log=lambda m: typer.echo(m, err=True)
@@ -100,7 +100,7 @@ def run(
         "date": local_date(),
         "timestamp": local_timestamp(),
         **git_state(Path.cwd()),
-        "command": _command_line(ctx.params),
+        "command": _command_line("run", ctx.params),
         "machine": machine_info(),
         "dataset_file": {"url": QUALITY_DEV.url, "sha256": QUALITY_DEV.sha256},
         **results,
@@ -118,3 +118,79 @@ def run(
 def report(results: Annotated[Path, typer.Argument(help="A results JSON from `run`.")]) -> None:
     """Print the Markdown tables for a results file."""
     typer.echo(render(json.loads(results.read_text(encoding="utf-8"))))
+
+
+def _dataset_or_exit() -> Path:
+    dataset = quality_path()
+    if not dataset.exists():
+        typer.echo("QuALITY is missing; run `raptree fetch` first.", err=True)
+        raise typer.Exit(2)
+    return dataset
+
+
+@app.command()
+def walkthrough(
+    ctx: typer.Context,
+    article: Annotated[str, typer.Option(help="QuALITY dev article id.")] = "62139",
+    node: Annotated[int, typer.Option(help="Summary node to open for the provenance view.")] = 84,
+    question: Annotated[int, typer.Option(help="1-based question to retrieve for.")] = 7,
+    width: Annotated[int, typer.Option(help="Terminal columns of every capture.")] = 100,
+    profile: Annotated[str, typer.Option(help="onnx (as quoted) or offline.")] = "onnx",
+    out: Annotated[Path, typer.Option(help="Where to write the captures.")] = WALKTHROUGH,
+) -> None:
+    """Build one article's tree and capture the TUI level by level.
+
+    The README walkthrough quotes these screens verbatim, so they are stored with the same
+    provenance fields as the benchmark results.
+    """
+    if profile not in PROFILES:
+        raise typer.BadParameter(f"choose from {', '.join(PROFILES)}", param_hint="--profile")
+    found = [a for a in load_quality(_dataset_or_exit()) if a.id == article]
+    if not found:
+        raise typer.BadParameter(f"no QuALITY dev article {article}", param_hint="--article")
+    art = found[0]
+    if not 1 <= question <= len(art.questions):
+        raise typer.BadParameter(
+            f"article has {len(art.questions)} questions", param_hint="--question"
+        )
+    from raptree.tui import capture_screen
+
+    tree = make_builder(PROFILES[profile]).build(art.id, art.title, art.text)
+    if not 0 <= node < len(tree.nodes):
+        raise typer.BadParameter(f"tree has {len(tree.nodes)} nodes", param_hint="--node")
+    tree.save(data_dir() / "trees" / profile / f"{art.id}.npz")
+    embedder = embedder_for(tree)
+
+    def screen(height: int, **steps: Any) -> str:
+        return capture_screen(tree, art.questions, embedder, size=(width, height), **steps)
+
+    q = art.questions[question - 1]
+    screens = {
+        "show": describe(tree) + "\n",
+        "top_layer": screen(16),
+        "one_level_down": screen(22, depth=1),
+        "summary_node": screen(22, node=node),
+        "question_collapsed": screen(34, question=question - 1),
+        "question_traversal": screen(34, question=question - 1, method="raptor-traversal"),
+    }
+    document = {
+        "what": "README walkthrough: verbatim TUI captures of one QuALITY dev article's tree",
+        "date": local_date(),
+        "timestamp": local_timestamp(),
+        **git_state(Path.cwd()),
+        "command": _command_line("walkthrough", ctx.params),
+        "machine": machine_info(),
+        "article": {"id": art.id, "title": art.title, "source": art.source},
+        "question": {"index": question, "id": q.id, "hard": q.hard, "gold": q.gold},
+        "tree": {
+            "layers": [len(layer) for layer in tree.layers],
+            "nodes": len(tree.nodes),
+            "sentences": len(tree.segments),
+            "article_tokens": tree.meta["article_tokens"],
+            "build_config": tree.meta["build_config"],
+        },
+        "screens": screens,
+    }
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    typer.echo(f"wrote {out}")

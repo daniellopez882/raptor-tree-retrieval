@@ -172,3 +172,30 @@ def test_cli_rejects_unknown_readers_and_providers(data_dir: Path, tmp_path: Pat
     assert bad_reader.exit_code == 2
     bad_llm = runner.invoke(app, ["run", "--llm", "mystery", "--out", out])
     assert bad_llm.exit_code == 2
+
+
+def test_walkthrough_stores_every_capture_with_provenance(data_dir: Path, tmp_path: Path) -> None:
+    out = tmp_path / "walkthrough.json"
+    args = ["walkthrough", "--profile", "offline", "--article", "90001", "--question", "3"]
+    result = runner.invoke(app, [*args, "--node", "0", "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    for key in ("date", "git_sha", "command", "machine", "tree", "screens"):
+        assert key in doc
+    screens = doc["screens"]
+    assert list(screens) == [
+        "show",
+        "top_layer",
+        "one_level_down",
+        "summary_node",
+        "question_collapsed",
+        "question_traversal",
+    ]
+    assert screens["show"].startswith("The Last Keeper of Gull Rock [90001]")
+    assert "L0 #0" in screens["summary_node"]
+    assert "raptor-collapsed:" in screens["question_collapsed"]
+    assert "raptor-traversal:" in screens["question_traversal"]
+    assert (data_dir / "trees" / "offline" / "90001.npz").exists()
+
+    bad = runner.invoke(app, [*args, "--node", "100000", "--out", str(out)])
+    assert bad.exit_code == 2

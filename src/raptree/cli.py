@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -194,26 +193,19 @@ def capture(
     out: Annotated[Path | None, typer.Option(help="Write here instead of stdout.")] = None,
 ) -> None:
     """Render the TUI headless after scripted steps and print the screen as text."""
-    from raptree.tui import TreeExplorer, screen_text
+    from raptree.tui import capture_screen
 
     tree = RaptorTree.load(tree_path)
-    explorer = TreeExplorer(tree, questions_for(tree), embedder_for(tree))
-    explorer.method = _method(method)
-
-    async def script() -> str:
-        async with explorer.run_test(size=(width, height)) as pilot:
-            if depth:
-                explorer.expand_to_depth(depth)
-            if question is not None:
-                explorer.ask(question - 1)
-            if node is not None:
-                await pilot.pause()
-                explorer.focus_node(node)
-            await pilot.pause()
-            await pilot.pause()
-            return screen_text(explorer)
-
-    text = asyncio.run(script())
+    text = capture_screen(
+        tree,
+        questions_for(tree),
+        embedder_for(tree),
+        method=_method(method),
+        depth=depth,
+        node=node,
+        question=None if question is None else question - 1,
+        size=(width, height),
+    )
     if out is None:
         # The screen is full of box-drawing characters; bypass the console code page.
         sys.stdout.buffer.write(text.encode("utf-8"))

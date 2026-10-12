@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 from typing import TYPE_CHECKING, ClassVar
 
@@ -318,3 +319,38 @@ def screen_text(app: App[None]) -> str:
         app.screen._compositor.render_update(full=True, screen_stack=app._background_screens)
     )
     return "\n".join(line.rstrip() for line in console.export_text().splitlines()) + "\n"
+
+
+def capture_screen(
+    tree: RaptorTree,
+    questions: list[Question],
+    embedder: Embedder | None,
+    *,
+    method: Method = "raptor-collapsed",
+    depth: int = 0,
+    node: int | None = None,
+    question: int | None = None,
+    size: tuple[int, int] = (120, 32),
+    budget: int = 2000,
+) -> str:
+    """Run the explorer headless, apply the scripted steps, and return the screen as text.
+
+    ``question`` is a 0-based index into ``questions``; ``node`` puts the cursor on that node.
+    """
+    explorer = TreeExplorer(tree, questions, embedder, budget=budget)
+    explorer.method = method
+
+    async def script() -> str:
+        async with explorer.run_test(size=size) as pilot:
+            if depth:
+                explorer.expand_to_depth(depth)
+            if question is not None:
+                explorer.ask(question)
+            if node is not None:
+                await pilot.pause()
+                explorer.focus_node(node)
+            await pilot.pause()
+            await pilot.pause()
+            return screen_text(explorer)
+
+    return asyncio.run(script())
