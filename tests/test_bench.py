@@ -123,3 +123,52 @@ def test_unknown_reader_is_rejected(quality_file: Path) -> None:
             quality_file,
             log=lambda m: None,
         )
+
+
+def test_llm_steps_run_through_the_fake_provider(quality_file: Path) -> None:
+    config = BenchConfig(
+        profile="offline",
+        readers=("overlap", "llm"),
+        summarizer="llm",
+        llm_provider="fake",
+        budget=300,
+        bootstrap_resamples=100,
+    )
+    results, predictions = run_benchmark(config, quality_file, log=lambda m: None)
+
+    assert results["config"]["summarizer"] == "llm"
+    assert results["config"]["llm_provider"] == "fake"
+    llm = results["readers"]["llm"]
+    assert llm["model"] == "llm(fake)"
+    assert llm["prompts"] == 5 * (len(METHODS) + 1)
+    assert 0 <= llm["unparsed_replies"] <= llm["prompts"]
+    assert set(results["accuracy"]) == {"overlap", "llm"}
+    # Only the fake stood in, so the run must say that no real LLM was measured.
+    assert [x["what"] for x in results["not_run"]] == ["any real LLM"]
+    assert all("llm" in m["predictions"] for p in predictions for m in p["methods"].values())
+
+
+def test_extractive_runs_list_both_llm_configurations_as_not_run(quality_file: Path) -> None:
+    config = BenchConfig(profile="offline", readers=("overlap",), bootstrap_resamples=50)
+    assert config.as_dict()["llm_provider"] is None
+    assert [x["what"] for x in config.not_run()] == [
+        "RAPTOR with LLM-written summaries",
+        "LLM reader over the full 2,000-token context",
+    ]
+
+
+def test_headline_file_only_takes_the_onnx_profile(
+    data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["run", "--profile", "offline", "--readers", "overlap"])
+    assert result.exit_code == 2
+    assert not (tmp_path / "bench" / "results").exists()
+
+
+def test_cli_rejects_unknown_readers_and_providers(data_dir: Path, tmp_path: Path) -> None:
+    out = str(tmp_path / "smoke-x.json")
+    bad_reader = runner.invoke(app, ["run", "--readers", "oracle", "--out", out])
+    assert bad_reader.exit_code == 2
+    bad_llm = runner.invoke(app, ["run", "--llm", "mystery", "--out", out])
+    assert bad_llm.exit_code == 2

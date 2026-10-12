@@ -6,14 +6,18 @@ from dataclasses import dataclass
 from typing import Literal
 
 from raptree.embed import Embedder, HashingEmbedder, OnnxSentenceEmbedder
+from raptree.llm import make_provider
 from raptree.reduce import PcaReducer, Reducer, UmapReducer
 from raptree.sources import require_model
-from raptree.summarize import ExtractiveSummarizer
+from raptree.summarize import ExtractiveSummarizer, LlmSummarizer, Summarizer
 from raptree.tokens import TokenCounter, WordCounter, WordPieceCounter
 from raptree.tree import BuildConfig, TreeBuilder
 
 Profile = Literal["onnx", "offline"]
 PROFILES: dict[str, Profile] = {"onnx": "onnx", "offline": "offline"}
+
+SummarizerKind = Literal["extractive", "llm"]
+SUMMARIZERS: dict[str, SummarizerKind] = {"extractive": "extractive", "llm": "llm"}
 
 
 @dataclass(frozen=True)
@@ -34,16 +38,27 @@ def components(profile: Profile, threads: int | None = None) -> Components:
     )
 
 
+def make_summarizer(kind: SummarizerKind, config: BuildConfig, llm: str = "openai") -> Summarizer:
+    """``extractive`` is what the benchmark measures; ``llm`` goes through a chat provider."""
+    if kind == "llm":
+        return LlmSummarizer(make_provider(llm), max_tokens=2 * config.summary_tokens)
+    return ExtractiveSummarizer(config.summary_tokens)
+
+
 def make_builder(
-    profile: Profile, config: BuildConfig | None = None, threads: int | None = None
+    profile: Profile,
+    config: BuildConfig | None = None,
+    threads: int | None = None,
+    *,
+    summarizer: SummarizerKind = "extractive",
+    llm: str = "openai",
 ) -> TreeBuilder:
-    """A tree builder with the extractive summariser, the configuration that is benchmarked."""
     cfg = config or BuildConfig()
     comps = components(profile, threads)
     return TreeBuilder(
         comps.embedder,
         comps.counter,
         comps.reducer,
-        ExtractiveSummarizer(cfg.summary_tokens),
+        make_summarizer(summarizer, cfg, llm),
         cfg,
     )

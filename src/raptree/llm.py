@@ -100,3 +100,15 @@ class FakeProvider:
     def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int) -> str:
         self.calls.append(list(messages))
         return self._responder(messages)
+
+
+LLM_PROVIDERS = ("openai", "fake")
+
+
+def make_provider(name: str) -> ChatProvider:
+    """``openai`` reads the endpoint from the environment; ``fake`` needs nothing."""
+    if name == "openai":
+        return OpenAICompatibleProvider.from_env()
+    if name == "fake":
+        return FakeProvider()
+    raise ProviderError(f"unknown provider {name!r}; choose from {', '.join(LLM_PROVIDERS)}")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 from typer.testing import CliRunner
 
 from raptree.cli import app
@@ -61,3 +62,39 @@ def test_unknown_method_is_a_usage_error(tmp_path: Path) -> None:
 
 def test_build_needs_a_source() -> None:
     assert runner.invoke(app, ["build", "--profile", "offline"]).exit_code == 2
+
+
+def test_build_with_llm_summaries_from_the_fake(tmp_path: Path) -> None:
+    tree_path = tmp_path / "keeper-llm.npz"
+    result = runner.invoke(
+        app,
+        [
+            "build",
+            "--sample",
+            "--profile",
+            "offline",
+            "--summarizer",
+            "llm",
+            "--llm",
+            "fake",
+            "--out",
+            str(tree_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    tree = RaptorTree.load(tree_path)
+    assert tree.meta["summarizer"].startswith("llm(fake")
+    assert any(s.origin == "summary" for s in tree.segments)
+
+
+def test_llm_summaries_without_an_endpoint_fail_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("RAPTREE_LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("RAPTREE_LLM_MODEL", raising=False)
+    result = runner.invoke(
+        app,
+        ["build", "--sample", "--profile", "offline", "--summarizer", "llm"],
+    )
+    assert result.exit_code == 1
+    assert "RAPTREE_LLM_BASE_URL" in result.output

@@ -11,9 +11,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from raptree.profiles import Profile, make_builder
+from raptree.llm import make_provider
+from raptree.profiles import Profile, SummarizerKind, make_builder
 from raptree.quality import load_quality
 from raptree.readers import (
+    LlmReader,
     OnnxPairScorer,
     OptionEvidence,
     OverlapScorer,
@@ -34,6 +36,8 @@ if TYPE_CHECKING:
 
 CONTROL = "no-context"
 READERS = ("nli", "cross-encoder", "overlap")
+# The LLM reader is opt-in: it needs an endpoint (or the fake, which measures nothing).
+ALL_READERS = (*READERS, "llm")
 SUBSETS = ("all", "hard", "easy")
 Log = Callable[[str], None]
 
@@ -45,6 +49,8 @@ class BenchConfig:
     evidence_tokens: int = 192
     readers: tuple[str, ...] = READERS
     profile: Profile = "onnx"
+    summarizer: SummarizerKind = "extractive"
+    llm_provider: str = "openai"
     limit_articles: int | None = None
     limit_questions: int | None = None
     bootstrap_resamples: int = 2000
@@ -70,11 +76,42 @@ class BenchConfig:
             "threads": self.threads,
             "build": self.build.as_dict(),
             "retrieval_query": "question + all four options",
-            "summarizer": "extractive centroid+MMR",
+            "summarizer": self.summarizer,
+            "llm_provider": self.llm_provider if self.uses_llm else None,
         }
 
+    @property
+    def uses_llm(self) -> bool:
+        return self.summarizer == "llm" or "llm" in self.readers
 
-def make_reader(name: str, threads: int | None) -> PairReader:
+    def not_run(self) -> list[dict[str, str]]:
+        """The LLM configurations this run left out, recorded so no table implies them."""
+        out = []
+        if self.summarizer != "llm":
+            out.append(
+                {
+                    "what": "RAPTOR with LLM-written summaries",
+                    "why": "needs an LLM endpoint; the extractive summariser was measured instead",
+                }
+            )
+        if "llm" not in self.readers:
+            out.append(
+                {
+                    "what": "LLM reader over the full 2,000-token context",
+                    "why": "needs an LLM endpoint; only the LLM-free readers were measured",
+                }
+            )
+        if self.uses_llm and self.llm_provider == "fake":
+            out.append(
+                {
+                    "what": "any real LLM",
+                    "why": "the deterministic fake provider stood in; its outputs measure nothing",
+                }
+            )
+        return out
+
+
+def make_pair_reader(name: str, threads: int | None) -> PairReader:
     if name == "overlap":
         return PairReader(OverlapScorer(), "premise-first")
     if name == "nli":
@@ -97,7 +134,7 @@ def make_reader(name: str, threads: int | None) -> PairReader:
             threads=threads,
         )
         return PairReader(scorer, "query-first")
-    raise ValueError(f"unknown reader {name!r}; choose from {', '.join(READERS)}")
+    raise ValueError(f"unknown reader {name!r}; choose from {', '.join(ALL_READERS)}")
 
 
 @dataclass
@@ -156,10 +193,21 @@ def run_benchmark(
     log: Log = print,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Run everything; returns the results document and one prediction record per question."""
+    if not config.readers:
+        raise ValueError("choose at least one reader")
+    for name in config.readers:
+        if name not in ALL_READERS:
+            raise ValueError(f"unknown reader {name!r}; choose from {', '.join(ALL_READERS)}")
     articles = load_quality(dataset)
     if config.limit_articles is not None:
         articles = articles[: config.limit_articles]
-    builder = make_builder(config.profile, config.build, config.threads)
+    builder = make_builder(
+        config.profile,
+        config.build,
+        config.threads,
+        summarizer=config.summarizer,
+        llm=config.llm_provider,
+    )
     embedder = builder.embedder
     warm_up_seconds = _warm_up(embedder, builder.reducer)
     log(f"warm-up {warm_up_seconds:.1f}s; {len(articles)} articles")
@@ -167,6 +215,8 @@ def run_benchmark(
     tree_rows: list[dict[str, Any]] = []
     rows: list[Row] = []
     items: list[OptionEvidence] = []
+    # Full packed contexts are only kept for the LLM reader; the pair readers see evidence.
+    contexts: list[str] | None = [] if "llm" in config.readers else None
     query_embed_seconds = 0.0
     n_queries = 0
     for index, article in enumerate(articles, 1):
@@ -215,6 +265,8 @@ def run_benchmark(
                     )
                     evidence.append(" ".join(tree.segments[s].text for s in chosen))
                 items.append(OptionEvidence(q.question, q.options, evidence))
+                if contexts is not None:
+                    contexts.append(found.text(tree))
                 rows.append(
                     Row(
                         qid=q.id,
@@ -232,26 +284,20 @@ def run_benchmark(
                     )
                 )
             items.append(OptionEvidence(q.question, q.options, [""] * len(q.options)))
+            if contexts is not None:
+                contexts.append("")
             rows.append(Row(q.id, article.id, q.hard, q.gold, CONTROL, 0, 0, 0, 0, 0.0))
 
     reader_stats: dict[str, dict[str, Any]] = {}
     for name in config.readers:
-        reader = make_reader(name, config.threads)
         log(f"reader {name}: {len(items)} items")
-        started = time.perf_counter()
-        answers = reader.answer_many(
-            items, progress=lambda done, total, n=name: log(f"  {n}: {done}/{total} pairs")
-        )
-        seconds = time.perf_counter() - started
-        reader_stats[name] = {
-            "model": reader.name,
-            "pairs": sum(len(item.options) for item in items),
-            "unique_pairs_scored": reader.pairs_scored,
-            "seconds": seconds,
-            "pairs_per_second": reader.pairs_scored / seconds if seconds > 0 else None,
-        }
-        for row, answer in zip(rows, answers, strict=True):
-            row.predictions[name] = answer.choice
+        if name == "llm":
+            assert contexts is not None
+            choices, reader_stats[name] = _read_with_llm(config, items, contexts, log)
+        else:
+            choices, reader_stats[name] = _read_with_pairs(name, config, items, log)
+        for row, choice in zip(rows, choices, strict=True):
+            row.predictions[name] = choice
 
     results = {
         "config": config.as_dict(),
@@ -266,18 +312,49 @@ def run_benchmark(
         "readers": reader_stats,
         "accuracy": _accuracy(rows, config),
         "paired_tests": _paired(rows, config),
-        "not_run": [
-            {
-                "what": "RAPTOR with LLM-written summaries",
-                "why": "needs an LLM endpoint; the extractive summariser was measured instead",
-            },
-            {
-                "what": "LLM reader over the full 2,000-token context",
-                "why": "needs an LLM endpoint; only the LLM-free readers were measured",
-            },
-        ],
+        "not_run": config.not_run(),
     }
     return results, _prediction_records(rows)
+
+
+def _read_with_pairs(
+    name: str, config: BenchConfig, items: list[OptionEvidence], log: Log
+) -> tuple[list[int], dict[str, Any]]:
+    reader = make_pair_reader(name, config.threads)
+    started = time.perf_counter()
+    answers = reader.answer_many(
+        items, progress=lambda done, total: log(f"  {name}: {done}/{total} pairs")
+    )
+    seconds = time.perf_counter() - started
+    stats = {
+        "model": reader.name,
+        "pairs": sum(len(item.options) for item in items),
+        "unique_pairs_scored": reader.pairs_scored,
+        "seconds": seconds,
+        "pairs_per_second": reader.pairs_scored / seconds if seconds > 0 else None,
+    }
+    return [a.choice for a in answers], stats
+
+
+def _read_with_llm(
+    config: BenchConfig, items: list[OptionEvidence], contexts: list[str], log: Log
+) -> tuple[list[int], dict[str, Any]]:
+    reader = LlmReader(make_provider(config.llm_provider))
+    started = time.perf_counter()
+    choices = []
+    for done, (item, context) in enumerate(zip(items, contexts, strict=True), 1):
+        choices.append(reader.answer(context, item.question, item.options).choice)
+        if done % 500 == 0 or done == len(items):
+            log(f"  llm: {done}/{len(items)} prompts")
+    seconds = time.perf_counter() - started
+    stats = {
+        "model": reader.name,
+        "prompts": len(items),
+        "unparsed_replies": sum(c < 0 for c in choices),
+        "seconds": seconds,
+        "prompts_per_second": len(items) / seconds if seconds > 0 else None,
+    }
+    return choices, stats
 
 
 def _tree_summary(tree_rows: list[dict[str, Any]]) -> dict[str, Any]:

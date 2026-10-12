@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from raptree.llm import FakeProvider, OpenAICompatibleProvider, ProviderError
+from raptree.llm import FakeProvider, OpenAICompatibleProvider, ProviderError, make_provider
 
 
 def test_openai_adapter_posts_a_chat_completion() -> None:
@@ -68,3 +68,12 @@ def test_fake_provider_is_deterministic_and_records_calls() -> None:
     assert first == fake.complete(messages, max_tokens=10)
     assert first.endswith("one two three")
     assert len(fake.calls) == 2
+
+
+def test_make_provider_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert isinstance(make_provider("fake"), FakeProvider)
+    monkeypatch.setenv("RAPTREE_LLM_BASE_URL", "http://localhost:8080/v1")
+    monkeypatch.setenv("RAPTREE_LLM_MODEL", "served-model")
+    assert make_provider("openai").name == "openai-compatible:served-model"
+    with pytest.raises(ProviderError, match="unknown provider"):
+        make_provider("mystery")

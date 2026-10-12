@@ -97,18 +97,16 @@ def tree_table(results: dict[str, Any]) -> str:
 
 
 def reader_table(results: dict[str, Any]) -> str:
-    lines = [
-        "| Reader | Pairs | Unique pairs scored | Seconds | Pairs/s |",
-        "|---|---:|---:|---:|---:|",
-    ]
-    for name, r in results["readers"].items():
-        rate = r["pairs_per_second"]
-        lines.append(
-            f"| {r['model']} | {r['pairs']} | {r['unique_pairs_scored']} | {r['seconds']:.0f} | "
-            f"{rate:.0f} |"
-            if rate is not None
-            else f"| {name} | {r['pairs']} | {r['unique_pairs_scored']} | - | - |"
-        )
+    lines = ["| Reader | Work | Seconds | Throughput |", "|---|---|---:|---:|"]
+    for r in results["readers"].values():
+        if "pairs" in r:
+            work = f"{r['pairs']} pairs, {r['unique_pairs_scored']} distinct"
+            rate, unit = r["pairs_per_second"], "pairs/s"
+        else:
+            work = f"{r['prompts']} prompts, {r['unparsed_replies']} unparsed"
+            rate, unit = r["prompts_per_second"], "prompts/s"
+        speed = f"{rate:.1f} {unit}" if rate is not None else "-"
+        lines.append(f"| {r['model']} | {work} | {r['seconds']:.0f} | {speed} |")
     return "\n".join(lines)
 
 

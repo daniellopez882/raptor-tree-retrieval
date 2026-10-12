@@ -11,8 +11,9 @@ import typer
 
 from raptree.bench.machine import git_state, local_date, local_timestamp, machine_info
 from raptree.bench.report import render
-from raptree.bench.runner import READERS, BenchConfig, run_benchmark
-from raptree.profiles import PROFILES
+from raptree.bench.runner import ALL_READERS, READERS, BenchConfig, run_benchmark
+from raptree.llm import LLM_PROVIDERS
+from raptree.profiles import PROFILES, SUMMARIZERS
 from raptree.sources import QUALITY_DEV, data_dir, quality_path
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help=__doc__)
@@ -41,8 +42,14 @@ def run(
     budget: Annotated[int, typer.Option(help="Context budget in WordPiece tokens.")] = 2000,
     beam: Annotated[int, typer.Option(help="Beam width of tree traversal.")] = 3,
     evidence_tokens: Annotated[int, typer.Option(help="Evidence kept per option.")] = 192,
-    readers: Annotated[str, typer.Option(help="Comma-separated readers.")] = ",".join(READERS),
+    readers: Annotated[
+        str, typer.Option(help=f"Comma-separated, from {', '.join(ALL_READERS)}.")
+    ] = ",".join(READERS),
     profile: Annotated[str, typer.Option(help="onnx (measured) or offline.")] = "onnx",
+    summarizer: Annotated[str, typer.Option(help="extractive (measured) or llm.")] = "extractive",
+    llm: Annotated[
+        str, typer.Option(help="Provider for llm steps: openai (RAPTREE_LLM_*) or fake.")
+    ] = "openai",
     limit_articles: Annotated[int | None, typer.Option(help="Smoke runs only.")] = None,
     limit_questions: Annotated[int | None, typer.Option(help="Per article; smoke only.")] = None,
     threads: Annotated[int | None, typer.Option(help="onnxruntime intra-op threads.")] = None,
@@ -51,12 +58,21 @@ def run(
     """Build all dev trees, retrieve with every method, read, and write the results JSON."""
     if profile not in PROFILES:
         raise typer.BadParameter(f"choose from {', '.join(PROFILES)}", param_hint="--profile")
+    if summarizer not in SUMMARIZERS:
+        raise typer.BadParameter(f"choose from {', '.join(SUMMARIZERS)}", param_hint="--summarizer")
+    if llm not in LLM_PROVIDERS:
+        raise typer.BadParameter(f"choose from {', '.join(LLM_PROVIDERS)}", param_hint="--llm")
+    chosen = tuple(r.strip() for r in readers.split(",") if r.strip())
+    if not chosen or any(r not in ALL_READERS for r in chosen):
+        raise typer.BadParameter(f"choose from {', '.join(ALL_READERS)}", param_hint="--readers")
     config = BenchConfig(
         budget=budget,
         beam=beam,
         evidence_tokens=evidence_tokens,
-        readers=tuple(r.strip() for r in readers.split(",") if r.strip()),
+        readers=chosen,
         profile=PROFILES[profile],
+        summarizer=SUMMARIZERS[summarizer],
+        llm_provider=llm,
         limit_articles=limit_articles,
         limit_questions=limit_questions,
         threads=threads,
@@ -65,6 +81,11 @@ def run(
         raise typer.BadParameter(
             "a run limited with --limit-* must write to a file named smoke-*.json",
             param_hint="--out",
+        )
+    fake = config.uses_llm and config.llm_provider == "fake"
+    if out.resolve() == HEADLINE.resolve() and (config.profile != "onnx" or fake):
+        raise typer.BadParameter(
+            f"{HEADLINE} holds the onnx-profile results; pass another --out", param_hint="--out"
         )
     dataset = quality_path()
     if not dataset.exists():

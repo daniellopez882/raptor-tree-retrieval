@@ -10,7 +10,8 @@ from typing import Annotated
 import typer
 
 from raptree.embed import Embedder, HashingEmbedder, OnnxSentenceEmbedder
-from raptree.profiles import PROFILES, Profile, make_builder
+from raptree.llm import LLM_PROVIDERS, ProviderError
+from raptree.profiles import PROFILES, SUMMARIZERS, Profile, SummarizerKind, make_builder
 from raptree.quality import Question, load_quality
 from raptree.retrieve import METHODS, Method, Retriever, query_text
 from raptree.samples import SAMPLE_ID, SAMPLE_TITLE, sample_questions, sample_text
@@ -61,8 +62,15 @@ def questions_for(tree: RaptorTree) -> list[Question]:
     return []
 
 
-def build_tree(doc_id: str, title: str, text: str, profile: Profile) -> RaptorTree:
-    return make_builder(profile).build(doc_id, title, text)
+def build_tree(
+    doc_id: str,
+    title: str,
+    text: str,
+    profile: Profile,
+    summarizer: SummarizerKind = "extractive",
+    llm: str = "openai",
+) -> RaptorTree:
+    return make_builder(profile, summarizer=summarizer, llm=llm).build(doc_id, title, text)
 
 
 def describe(tree: RaptorTree, preview: int = 70) -> str:
@@ -103,10 +111,18 @@ def build(
     text_file: Annotated[Path | None, typer.Option(help="Build from a plain-text file.")] = None,
     sample: Annotated[bool, typer.Option(help="Build the bundled sample story.")] = False,
     profile: Annotated[str, typer.Option(help="onnx or offline.")] = "onnx",
+    summarizer: Annotated[str, typer.Option(help="extractive or llm.")] = "extractive",
+    llm: Annotated[
+        str, typer.Option(help="For --summarizer llm: openai (reads RAPTREE_LLM_*) or fake.")
+    ] = "openai",
     out: Annotated[Path | None, typer.Option(help="Where to write the .npz tree.")] = None,
 ) -> None:
     """Build and save one tree."""
     chosen = _profile(profile)
+    if summarizer not in SUMMARIZERS:
+        raise typer.BadParameter(f"choose from {', '.join(SUMMARIZERS)}", param_hint="--summarizer")
+    if llm not in LLM_PROVIDERS:
+        raise typer.BadParameter(f"choose from {', '.join(LLM_PROVIDERS)}", param_hint="--llm")
     if sample:
         doc_id, title, text = SAMPLE_ID, SAMPLE_TITLE, sample_text()
     elif text_file is not None:
@@ -118,7 +134,11 @@ def build(
         doc_id, title, text = found[0].id, found[0].title, found[0].text
     else:
         raise typer.BadParameter("give an article id, --text-file or --sample")
-    tree = build_tree(doc_id, title, text, chosen)
+    try:
+        tree = build_tree(doc_id, title, text, chosen, SUMMARIZERS[summarizer], llm)
+    except ProviderError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
     target = out or data_dir() / "trees" / chosen / f"{doc_id}.npz"
     tree.save(target)
     typer.echo(describe(tree))
