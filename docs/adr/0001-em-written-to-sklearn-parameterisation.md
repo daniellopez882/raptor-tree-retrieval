@@ -45,7 +45,7 @@ and drops out of the next layer.
 - Differences between this tree builder and RAPTOR come from documented choices, not from a
   numerical slip inside EM.
 - A full-covariance component in 10 dimensions carries 55 covariance and 10 mean parameters.
-  A QuALITY article gives roughly 40 to 80 leaves, so BIC's penalty keeps k small. Building
+  A QuALITY article gives roughly 30 to 80 leaves, so BIC's penalty keeps k small. Building
   stops once a layer has 11 nodes or fewer (RAPTOR's `reduction_dim + 1` rule), and the articles
   inspected while building this project gave trees of 2 or 3 layers. The trees are shallow
   because of these rules, not because of a bug, and the benchmark reports the depth histogram
