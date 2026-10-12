@@ -21,6 +21,10 @@ def _pct(x: float) -> str:
     return f"{100.0 * x:.1f}"
 
 
+def _p(p: float) -> str:
+    return "<0.001" if p < 0.001 else f"{p:.3f}"
+
+
 def accuracy_table(results: dict[str, Any], reader: str) -> str:
     acc = results["accuracy"][reader]
     lines = [
@@ -54,8 +58,8 @@ def paired_table(results: dict[str, Any], reader: str, against: str = "raptor-co
             continue
         lines.append(
             f"| {LABELS[t['a']]} | {LABELS[t['b']]} | {100.0 * t['difference']:+.1f} | "
-            f"{t['a_only_correct']} | {t['b_only_correct']} | {t['p_value']:.3f} | "
-            f"{t['p_holm']:.3f} |"
+            f"{t['a_only_correct']} | {t['b_only_correct']} | {_p(t['p_value'])} | "
+            f"{_p(t['p_holm'])} |"
         )
     return "\n".join(lines)
 

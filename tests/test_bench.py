@@ -8,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from raptree.bench.cli import app
-from raptree.bench.report import render
+from raptree.bench.report import paired_table, render
 from raptree.bench.runner import CONTROL, BenchConfig, run_benchmark
 from raptree.retrieve import METHODS
 
@@ -97,6 +97,21 @@ def test_cli_writes_results_with_provenance(data_dir: Path, tmp_path: Path) -> N
     report = runner.invoke(app, ["report", str(out)])
     assert report.exit_code == 0
     assert "### Accuracy, reader = overlap" in report.output
+
+
+def test_paired_table_never_prints_a_zero_p_value() -> None:
+    test = {"difference": 0.05, "a_only_correct": 40, "b_only_correct": 10, "n": 200}
+    results = {
+        "paired_tests": {
+            "nli": [
+                {**test, "a": "raptor-collapsed", "b": CONTROL, "p_value": 2e-4, "p_holm": 0.003},
+                {**test, "a": "dense", "b": "raptor-collapsed", "p_value": 0.5, "p_holm": 1.0},
+            ]
+        }
+    }
+    rows = paired_table(results, "nli").splitlines()[2:]
+    assert rows[0].endswith("| <0.001 | 0.003 |")
+    assert rows[1].endswith("| 0.500 | 1.000 |")
 
 
 def test_limited_runs_cannot_overwrite_headline_results(data_dir: Path, tmp_path: Path) -> None:
