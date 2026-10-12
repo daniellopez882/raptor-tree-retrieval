@@ -125,5 +125,6 @@ def render(results: dict[str, Any]) -> str:
     parts += ["### Retrieved contexts", retrieval_table(results)]
     parts += ["### Trees", tree_table(results)]
     parts += ["### Readers", reader_table(results)]
-    parts += ["### Not run"] + [f"- {x['what']}: {x['why']}" for x in results["not_run"]]
+    not_run = [f"- {x['what']}: not run ({x['why']})" for x in results["not_run"]]
+    parts += ["### Not run", "\n".join(not_run) or "- nothing"]
     return "\n\n".join(parts) + "\n"
