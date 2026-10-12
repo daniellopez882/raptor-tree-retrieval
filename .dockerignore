@@ -1,0 +1,10 @@
+# Only what the image build reads; everything else (tests, docs, bench results, .venv,
+# caches, .git) stays out of the build context.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!src/
+**/__pycache__
+**/*.py[cod]
