@@ -1,8 +1,8 @@
 {
   "what": "README walkthrough: verbatim TUI captures of one QuALITY dev article's tree",
-  "date": "2026-10-12",
-  "timestamp": "2026-10-12T16:06:04+05:00",
-  "git_sha": "498bbb023c7c958bafd1b91ff208081cea3ed6cf",
+  "date": "2026-10-13",
+  "timestamp": "2026-10-13T02:06:15+05:00",
+  "git_sha": "ab1333899cc81c320e43ef16e3edf4c55bb639f8",
   "git_dirty": false,
   "command": "uv run raptree-bench walkthrough --article 62139 --node 84 --question 7 --width 100 --profile onnx --out bench/results/walkthrough-62139.json",
   "machine": {
