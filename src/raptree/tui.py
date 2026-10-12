@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from raptree.quality import Question
     from raptree.tree import RaptorTree
 
+FOOTER_WAIT_ROUNDS = 50
+
 
 def _preview(text: str, width: int) -> str:
     return text if len(text) <= width else text[: width - 1].rstrip() + "…"
@@ -351,6 +353,14 @@ def capture_screen(
                 explorer.focus_node(node)
             await pilot.pause()
             await pilot.pause()
-            return screen_text(explorer)
+            # The footer recomposes its key bindings only after a refresh, so on a busy machine
+            # two pauses can still leave the bottom row blank; wait until it is drawn.
+            text = screen_text(explorer)
+            for _ in range(FOOTER_WAIT_ROUNDS):
+                if text.splitlines()[-1].strip():
+                    break
+                await pilot.pause()
+                text = screen_text(explorer)
+            return text
 
     return asyncio.run(script())
