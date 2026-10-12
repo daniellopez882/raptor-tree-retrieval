@@ -1,16 +1,16 @@
  ⭘                                 raptree — The Ferry · raptor-traversal
 ╭────────────────────────────────────────────────────────────────╮╭──────────────────────────────────────────╮
-│▼ The Ferry · nodes per layer 1/2/4                             ││ Why did the ferry turn back?             │
-│└── ▼ ● 1 L2 #6     17 tok  2 ch  The ferry left the north pier ││   A. Engine trouble                      │
-│    ├── ▼ ● 2 L1 #4     16 tok  2 ch  The ferry left the north p││ * B. A storm rose                        │
-│    │   ├──     L0 #0     16 tok  leaf  The ferry left the north││   C. No passengers                       │
-│    │   └──     L0 #1     15 tok  leaf  A storm rose over the st││   D. Late flour                          │
-│    └── ▶     L1 #5     18 tok  2 ch  In the town the bakery ope││                                          │
-│                                                                ││ raptor-traversal: 2 nodes, 33 of 40      │
-│                                                                ││ tokens (L2×1, L1×1)                      │
+│▼ The Ferry · nodes per layer 1/2/4                             ││ raptor-traversal: 2 nodes, 33 of 40      │
+│└── ▼ ● 1 L2 #6     17 tok  2 ch  The ferry left the north pier ││ tokens (L2×1, L1×1)                      │
+│    ├── ▼ ● 2 L1 #4     16 tok  2 ch  The ferry left the north p││                                          │
+│    │   ├──     L0 #0     16 tok  leaf  The ferry left the north││ Why did the ferry turn back?             │
+│    │   └──     L0 #1     15 tok  leaf  A storm rose over the st││   A. Engine trouble                      │
+│    └── ▶     L1 #5     18 tok  2 ch  In the town the bakery ope││ * B. A storm rose                        │
+│                                                                ││   C. No passengers                       │
+│                                                                ││   D. Late flour                          │
+│                                                                ││                                          │
 │                                                                ││ * marks the gold answer; ● and a rank    │
 │                                                                ││ mark retrieved nodes in the tree.        │
-│                                                                ││                                          │
 │                                                                ││                                          │
 │                                                                ││                                          │
 │                                                                ││                                          │

@@ -288,12 +288,14 @@ class TreeExplorer(App[None]):
             layer = self.raptor.nodes[node_id].layer
             layers[layer] = layers.get(layer, 0) + 1
         mix = ", ".join(f"L{k}×{v}" for k, v in sorted(layers.items(), reverse=True))
+        # The retrieval summary goes first so it stays visible when the options are long.
         lines = [
+            f"{found.method}: {len(found.node_ids)} nodes, {found.tokens} of "
+            f"{self.retriever.budget} tokens ({mix})",
+            "",
             f"{q.question}",
             *[f"{'*' if i == q.gold else ' '} {'ABCD'[i]}. {o}" for i, o in enumerate(q.options)],
             "",
-            f"{found.method}: {len(found.node_ids)} nodes, {found.tokens} of "
-            f"{self.retriever.budget} tokens ({mix})",
             "* marks the gold answer; ● and a rank mark retrieved nodes in the tree.",
         ]
         self.query_one("#detail", Static).update(Text("\n".join(lines)))

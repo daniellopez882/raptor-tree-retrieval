@@ -77,7 +77,7 @@ def describe(tree: RaptorTree, preview: int = 70) -> str:
     lines = [
         f"{tree.title} [{tree.doc_id}]",
         f"{len(tree.segments)} sentences, {tree.meta['article_tokens']} tokens "
-        f"({tree.meta['token_counter']}), built in {tree.meta['build_seconds']:.1f}s",
+        f"({tree.meta['token_counter']}), summaries by {tree.meta['summarizer']}",
     ]
     for depth, layer in reversed(list(enumerate(tree.layers))):
         lines.append(f"layer {depth}: {len(layer)} nodes")
@@ -142,7 +142,7 @@ def build(
     target = out or data_dir() / "trees" / chosen / f"{doc_id}.npz"
     tree.save(target)
     typer.echo(describe(tree))
-    typer.echo(f"saved {target}")
+    typer.echo(f"saved {target} (built in {tree.meta['build_seconds']:.1f}s)")
 
 
 @app.command()
