@@ -1,5 +1,7 @@
 # raptor-tree-retrieval
 
+[![ci](https://github.com/daniellopez882/raptor-tree-retrieval/actions/workflows/ci.yml/badge.svg)](https://github.com/daniellopez882/raptor-tree-retrieval/actions/workflows/ci.yml) ![python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white) ![licence](https://img.shields.io/badge/licence-MIT-green)
+
 This project builds RAPTOR summary trees over the long stories in
 [QuALITY](https://github.com/nyu-mll/quality). It then tests one question: if every method
 gets the same 2,000-token context, does retrieving from the tree beat retrieving flat chunks?
